@@ -1,19 +1,19 @@
 # configured aws provider with proper credentials
 provider "aws" {
-  region    = "us-east-2"
-  shared_config_files      = ["/Users/austi/.aws/conf"]
-  shared_credentials_files = ["/Users/austi/.aws/credentials"]
-  profile                  = "austin"
+  region    = "eu-west-1"
+  shared_config_files      = ["/home/seyin/.aws/config"]
+  shared_credentials_files = ["/home/seyin/.aws/credentials"]
+  profile                  = "Seyi"
 }
 
 # Create a remote backend for your terraform 
 terraform {
   backend "s3" {
-    bucket = "may-class-devops-austin"
+    bucket = "sf-proper"
     dynamodb_table = "app-state"
     key    = "LockID"
-    region = "us-east-1"
-    profile = "austin"
+    region = "eu-west-1"
+    profile = "Seyi"
   }
 }
 
