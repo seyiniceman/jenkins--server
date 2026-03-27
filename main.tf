@@ -1,141 +1,156 @@
-# configured aws provider with proper credentials
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  backend "s3" {
+    bucket         = "sf-proper"
+    dynamodb_table = "app-state"
+    key            = "LockID"
+    region         = "eu-west-1"
+    profile        = "Seyi"
+  }
+}
+
+########################################
+# PROVIDER
+########################################
 provider "aws" {
-  region    = "eu-west-1"
+  region                   = "eu-west-1"
   shared_config_files      = ["/home/seyin/.aws/config"]
   shared_credentials_files = ["/home/seyin/.aws/credentials"]
   profile                  = "Seyi"
 }
 
-# Create a remote backend for your terraform 
-terraform {
-  backend "s3" {
-    bucket = "sf-proper"
-    dynamodb_table = "app-state"
-    key    = "LockID"
-    region = "eu-west-1"
-    profile = "Seyi"
-  }
-}
-
-
-# create default vpc if one does not exit
-resource "aws_default_vpc" "default_vpc" {
-
-  tags    = {
-    Name  = "default vpc"
-  }
-}
-
-
-# use data source to get all avalablility zones in region
+########################################
+# DATA SOURCES
+########################################
 data "aws_availability_zones" "available_zones" {}
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
 
-# create default subnet if one does not exit
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"]
+}
+
+########################################
+# NETWORK
+########################################
+resource "aws_default_vpc" "default_vpc" {
+  tags = {
+    Name = "default-vpc"
+  }
+}
+
 resource "aws_default_subnet" "default_az1" {
   availability_zone = data.aws_availability_zones.available_zones.names[0]
 
-  tags   = {
-    Name = "default subnet"
-}
+  tags = {
+    Name = "default-subnet"
+  }
 }
 
-
-# create security group for the ec2 instance
+########################################
+# SECURITY GROUP
+########################################
 resource "aws_security_group" "ec2_security_group" {
-  name        = "instance security group"
-  description = "allow access on ports 8080 and 22"
+  name        = "jenkins-security-group"
+  description = "Allow SSH, HTTP, Jenkins"
   vpc_id      = aws_default_vpc.default_vpc.id
 
-  # allow access on port 8080
   ingress {
-    description      = "http proxy access"
-    from_port        = 8080
-    to_port          = 8080
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  # allow access on port 22
-  ingress {
-    description      = "ssh access"
-    from_port        = 22
-    to_port          = 22
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
+    description = "Jenkins UI"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # ⚠️ Restrict in production
   }
 
   ingress {
-    description      = "http proxy-nginx access"
-    from_port        = 80
-    to_port          = 80
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # ⚠️ Restrict in production
   }
 
   ingress {
-    description      = "http nginx access"
-    from_port        = 9090
-    to_port          = 9090
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Alt HTTP"
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = -1
-    cidr_blocks      = ["0.0.0.0/0"]
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags   = {
-    Name = "Jenkins server security group"
+  tags = {
+    Name = "jenkins-sg"
   }
 }
 
-
-# use data source to get a registered amazon linux 2 ami
-data "aws_ami" "ubuntu" {
-
-    most_recent = true
-
-    filter {
-        name   = "name"
-        values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
-    }
-
-    filter {
-        name = "virtualization-type"
-        values = ["hvm"]
-    }
-
-    owners = ["099720109477"]
+########################################
+# KEY PAIR (FIXED PATH)
+########################################
+resource "aws_key_pair" "my_key" {
+  key_name   = "sf_key"
+  public_key = file("/home/seyin/.ssh/id_rsa.pub")
 }
 
-# launch the ec2 instance and install website
-
+########################################
+# EC2 INSTANCE
+########################################
 resource "aws_instance" "ec2_instance1" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t2.small"
+  instance_type          = "t3.medium"
   subnet_id              = aws_default_subnet.default_az1.id
   vpc_security_group_ids = [aws_security_group.ec2_security_group.id]
-  key_name               = "may_key"
-  user_data            = "${file("jenkins_install.sh")}"
+  key_name               = aws_key_pair.my_key.key_name
+
+  user_data = file("${path.module}/jenkins_install.sh")
+
+  # 🔥 IMPORTANT: recreate instance when script changes
+  user_data_replace_on_change = true
 
   tags = {
     Name = "Jenkins-server"
   }
 }
 
-resource "aws_instance" "ec2_instance2" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t2.micro"
-  subnet_id              = aws_default_subnet.default_az1.id
-  vpc_security_group_ids = [aws_security_group.ec2_security_group.id]
-  key_name               = "may_key"
-  user_data            = "${file("docker-install.sh")}"
+########################################
+# OUTPUT
+########################################
+output "jenkins_url" {
+  description = "Access Jenkins UI"
+  value       = "http://${aws_instance.ec2_instance1.public_ip}:8080"
+}
 
-  tags = {
-    Name = "Docker-server"
-  }
+output "public_ip" {
+  value = aws_instance.ec2_instance1.public_ip
 }
