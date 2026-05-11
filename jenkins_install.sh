@@ -21,8 +21,9 @@ install -m 0755 -d /etc/apt/keyrings
 ########################################
 # JAVA + BASIC TOOLS
 ########################################
-apt-get install -y openjdk-17-jdk git maven
-
+apt-get install -y openjdk-21-jdk git maven
+# Force the system to use Java 21
+update-java-alternatives --set $(ls -d /usr/lib/jvm/java-1.21.0-openjdk-amd64 | head -n 1)
 ########################################
 # JENKINS (2026 UPDATED KEY & FIX)
 ########################################
