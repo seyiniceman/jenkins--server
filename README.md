@@ -174,3 +174,10 @@ http://<EC2-Public-IP>:8080
 ## Project Outcome
 
 Successfully provisioned an AWS EC2 instance using Terraform and automated the installation of Jenkins and Docker through Bash scripts. The solution provides a repeatable, Infrastructure as Code deployment process that eliminates manual configuration and establishes a ready-to-use Continuous Integration environment for DevOps workflows.
+
+# Author
+
+**Seyi Akinmusere**
+
+DevOps | Cloud Engineer | AWS | Terraform | Jenkins | Docker | Kubernetes
+
